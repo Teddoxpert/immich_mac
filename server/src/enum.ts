@@ -313,6 +313,7 @@ export enum TranscodeHWAccel {
   QSV = 'qsv',
   VAAPI = 'vaapi',
   RKMPP = 'rkmpp',
+  VIDEOTOOLBOX = 'videotoolbox',
   DISABLED = 'disabled',
 }
 

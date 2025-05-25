@@ -45,12 +45,13 @@ import { clamp, isFaceImportEnabled, isFacialRecognitionEnabled } from 'src/util
 
 @Injectable()
 export class MediaService extends BaseService {
-  videoInterfaces: VideoInterfaces = { dri: [], mali: false };
+  videoInterfaces: VideoInterfaces = { dri: [], mali: false, hasVideotoolbox: false };
 
   @OnEvent({ name: 'app.bootstrap' })
   async onBootstrap() {
     const [dri, mali] = await Promise.all([this.getDevices(), this.hasMaliOpenCL()]);
-    this.videoInterfaces = { dri, mali };
+    const hasVideotoolbox = process.platform === 'darwin';
+    this.videoInterfaces = { dri, mali, hasVideotoolbox };
   }
 
   @OnJob({ name: JobName.QUEUE_GENERATE_THUMBNAILS, queue: QueueName.THUMBNAIL_GENERATION })

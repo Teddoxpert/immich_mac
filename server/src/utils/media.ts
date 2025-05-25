@@ -69,6 +69,14 @@ export class BaseConfig implements VideoCodecSWConfig {
           : new RkmppSwDecodeConfig(config, interfaces);
         break;
       }
+      case TranscodeHWAccel.VIDEOTOOLBOX: {
+        if (!interfaces.hasVideotoolbox) {
+          throw new Error('Videotoolbox acceleration is not available on this system.');
+        }
+        // Videotoolbox only supports hardware decoding
+        handler = new VideotoolboxHwDecodeConfig(config, interfaces);
+        break;
+      }
       default: {
         throw new Error(`${config.accel.toUpperCase()} acceleration is unsupported`);
       }
@@ -643,6 +651,87 @@ export class NvencHwDecodeConfig extends NvencSwDecodeConfig {
 
   getInputThreadOptions() {
     return [`-threads 1`];
+  }
+
+  getOutputThreadOptions() {
+    return [];
+  }
+}
+
+export class VideotoolboxHwDecodeConfig extends BaseHWConfig {
+  constructor(
+    protected config: SystemConfigFFmpegDto,
+    interfaces: VideoInterfaces,
+  ) {
+    super(config, interfaces);
+  }
+
+  getSupportedCodecs() {
+    return [VideoCodec.H264, VideoCodec.HEVC];
+  }
+
+  getVideoCodec(): string {
+    return `${this.config.targetVideoCodec}_videotoolbox`;
+  }
+
+  getBaseInputOptions(videoStream: VideoStreamInfo, format?: VideoFormat): string[] {
+    return ['-hwaccel videotoolbox', '-hwaccel_output_format videotoolbox', '-noautorotate'];
+  }
+
+  getDevice(interfaces: VideoInterfaces): string {
+    return 'videotoolbox'; // Placeholder, not used by videotoolbox
+  }
+
+  getFilterOptions(videoStream: VideoStreamInfo): string[] {
+    const filters = super.getFilterOptions(videoStream);
+
+    // Remove any existing scale filter from BaseConfig if present
+    const scaleFilterIndex = filters.findIndex((filter) => filter.startsWith('scale='));
+    if (scaleFilterIndex !== -1) {
+      filters.splice(scaleFilterIndex, 1);
+    }
+
+    if (this.shouldScale(videoStream)) {
+      // Add videotoolbox specific scaling.
+      // Output format nv12 is generally a safe bet for compatibility.
+      filters.push(`scale_videotoolbox=${this.getScaling(videoStream)}:format=nv12`);
+    }
+
+    // Software tonemapping will be applied if this.shouldToneMap(videoStream) is true
+    // and the base getFilterOptions includes tonemapx.
+    // If videotoolbox had specific tonemapping, it would be handled here.
+    return filters;
+  }
+
+  // Videotoolbox might not use traditional presets or might have its own way.
+  // For now, let's assume it doesn't use numeric presets like libx264.
+  getPresetOptions() {
+    return [];
+  }
+
+  // Videotoolbox might not use CRF or might have its own quality settings.
+  // This needs to be adjusted based on how VideoToolbox handles quality.
+  // For now, let's use a generic quality parameter if available or none.
+  getBitrateOptions() {
+    const bitrates = this.getBitrateDistribution();
+    // Videotoolbox typically uses -b:v for average bitrate.
+    // Constant quality might be controlled differently or not available.
+    // Forcing a bitrate might be the most straightforward approach for now.
+    if (bitrates.max > 0) {
+      return [
+        `-b:v ${bitrates.target}${bitrates.unit}`,
+        `-maxrate ${bitrates.max}${bitrates.unit}`, // Maxrate might be supported
+      ];
+    }
+    // If no bitrate is set, ffmpeg might use a default quality for videotoolbox.
+    // It's better to specify a bitrate if possible.
+    // As a fallback, could try to use a quality setting if one exists for videotoolbox, e.g. -q:v
+    return [`-q:v ${this.config.crf}`]; // This is a guess, might need adjustment
+  }
+
+  getInputThreadOptions() {
+    // Videotoolbox is a hardware encoder, thread options might not be relevant in the same way.
+    return [];
   }
 
   getOutputThreadOptions() {

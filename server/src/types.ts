@@ -156,6 +156,7 @@ export interface ProbeOptions {
 export interface VideoInterfaces {
   dri: string[];
   mali: boolean;
+  hasVideotoolbox?: boolean;
 }
 
 export type ConcurrentQueueName = Exclude<
